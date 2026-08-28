@@ -1,31 +1,35 @@
 # 📚 3D Interactive Goodreads Bookshelf
 
 ![Screenshot of the finished 3D Interactive Goodreads Bookshelf](screenshot-1.0.0.png)
+An interactive 3D WebGL bookshelf widget built with **Three.js** and **GSAP**. It connects to your public Goodreads profile to procedurally render dynamic, natural-looking stacks for your **"To Be Read"** and **"Recently Read"** shelves, alongside a floating shingled fan display for your **"Currently Reading"** books.
 
-An interactive 3D WebGL bookshelf widget built with **Three.js** and **GSAP**. It connects to public Goodreads shelves to procedurally render dynamic, natural-looking stacks of books for your **"To Be Read"** and **"Recently Read"** lists.
-
-Each book features procedural dimensions derived from page counts, dynamic palette-matched spine and back-cover generation, morphing sticky-note reviews, smooth focus transitions, panning, and zoom inspection.
+Each book features procedural dimensions derived from page counts, dynamic palette-matched spine and back-cover canvas generation, conditional morphing sticky-note reviews, smooth focus transitions, click-and-drag panning, scroll-wheel zooming, and native fullscreen support.
 
 ---
 
 ## ✨ Features
 
-* **Procedural Book Geometry:** Generates physical book thickness based on page count, with natural jitter in position and yaw angle so stacks look casual and realistic.
-* **Dynamic Texture & Palette Pipeline:** Extracts dominant and contrasting colors directly from front cover images using an offscreen 2D canvas to dynamically paint matching spines and back covers (complete with blurb, star ratings, and metadata).
-* **Interactive Sticky Notes:** Books with reader reviews render a post-it note in the upper-right quadrant that curls upward via geometric morph targets when clicked.
+* **Three Dynamic Shelves:**
+  * **To Be Read:** Procedural vertical stack sorted by `user_date_added` (newest on top).
+  * **Recently Read:** Procedural vertical stack sorted by `user_read_at` (newest on top).
+  * **Currently Reading:** Floating, fanned shingled cascade displayed semi-upright behind the main stacks.
+* **Procedural Book Geometry:** Realistically scales spine thickness based on page count, with natural jitter in position and yaw angle so stacks look casual and realistic.
+* **Dynamic Texture & Palette Pipeline:** Automatically extracts dominant and accent colors from front covers using an offscreen 2D canvas to render matching spines (with titles, authors, and curvature shading) and back covers (with blurbs, star ratings, and metadata).
+* **Review-Only Sticky Notes:** If you have written a review on Goodreads, a yellow post-it note appears in the upper-right quadrant of the cover. Clicking the note curls it upward via vertex morph targets to reveal the cover beneath.
 * **Smooth Camera & Inspection Controls:**
-  * Click any book to transition it into front-and-center focus.
-  * Click an active book to flip it 180° and inspect the back cover.
-  * Drag to pan the focused book across the camera plane.
-  * Scroll wheel to zoom in up to 3x to read blurbs and notes.
-  * Click empty space to return the book to its stack.
-* **Embed-Ready & Responsive:** Integrated with `ResizeObserver` to fit any layout box, sidebar, or blog container without window-binding distortion.
+  * **Click to Inspect:** Smoothly transitions any book from its shelf into front-and-center focus.
+  * **Flip (180°):** Click an active book to flip it end-over-end to read the back blurb and stats.
+  * **Click & Drag:** Pan the focused book freely across the camera plane.
+  * **Scroll Wheel Zoom:** Zoom in and out ($0.6\times$ to $3.0\times$) to inspect fine text.
+  * **Hover Lift:** Hovering over any book slightly lifts it along its normal vector.
+  * **Click Away:** Clicking empty space smoothly returns the book to its exact position on its shelf.
+* **Fullscreen Mode:** Toggle button in the upper-right corner expands the widget to full viewport resolution (with <kbd>Esc</kbd> support) without breaking camera framing or aspect ratios.
 
 ---
 
 ## 🚀 Quick Start
 
-### 1. Clone & Serve Locally
+### 1. Clone & Run Locally
 
 Because the project uses standard ES Modules (`<script type="module">`), it must be served over HTTP/HTTPS rather than opened directly as a local file (`file:///`).
 
@@ -34,7 +38,7 @@ Because the project uses standard ES Modules (`<script type="module">`), it must
 git clone [https://github.com/your-username/book-flipper.git](https://github.com/your-username/book-flipper.git)
 cd book-flipper
 
-# Start a local server (choose one):
+# Start a local dev server (choose one):
 npx serve .
 # or
 npx vite
@@ -48,7 +52,7 @@ Open `http://localhost:3000` (or `http://localhost:8000`) in your browser.
 
 ## ⚙️ Configuration & Customization
 
-### 1. Point to Your Goodreads Profile
+### 1. Set Your Goodreads Profile
 
 Open `main.js` and update the configuration variables at the top of the file:
 
@@ -61,11 +65,11 @@ export const MAX_BOOKS_PER_STACK = 6;
 // ----------------------------------------------------------------------
 ```
 
-> **Note:** The scraper supports either a full profile URL (e.g. `https://www.goodreads.com/user/show/1234567-username`) or just the raw numeric ID (`1234567`). Your Goodreads account privacy settings must allow public shelf viewing.
+> **Note:** Accepts either a full profile URL (e.g. `https://www.goodreads.com/user/show/1234567-username`) or just the raw numeric ID (`1234567`). Your Goodreads account privacy settings must allow public shelf viewing.
 
 ---
 
-### 2. Configure the Backend Proxy
+### 2. Configure Your Backend Proxy
 
 Goodreads restricts client-side browser requests via CORS and CloudFront WAF. A lightweight serverless proxy (such as a free Cloudflare Worker) bridges your frontend to Goodreads RSS feeds.
 
@@ -78,9 +82,9 @@ const proxyUrl = `[https://your-worker-subdomain.workers.dev/?id=$](https://your
 
 ---
 
-### 3. Customize Physical Stacking & Sizing
+### 3. Customize Physical Stacking & Spines
 
-You can customize the physical appearance, dimensions, and randomness of the stacks in `BookStackModule.js` via `STACK_CONFIG`:
+Adjust physical dimensions, spine limits, and jitter randomness in `BookStackModule.js` via `STACK_CONFIG`:
 
 ```javascript
 export const STACK_CONFIG = {
@@ -107,21 +111,14 @@ export const STACK_CONFIG = {
 
 ### 4. Adjust Interaction & Zoom Settings
 
-In `BookInteractionController.js`, you can adjust how close the book sits, zoom boundaries, and hover lift distance:
-
-```javascript
-// Constructor defaults
-focusDistance = 3.8;         // Fallback distance from camera
-hoverLift = 0.08;            // How high a book floats on hover
-this.minZoom = 0.6;          // Minimum scroll-wheel zoom out limit
-this.maxZoom = 3.0;          // Maximum scroll-wheel zoom in limit
-```
+* **Camera Elevation:** In `main.js` under `initScene()`, adjust `this.camera.position.set(0, 3.0, 5.7)` and `this.camera.lookAt(0, 1.05, 0)` to shift the circular pedestals and floating shelf higher or lower relative to the bottom labels.
+* **Inspection Zoom Limits:** In `BookInteractionController.js`, adjust `this.minZoom` (default `0.6`), `this.maxZoom` (default `3.0`), and `hoverLift` (default `0.08`).
 
 ---
 
 ## ☁️ Cloudflare Worker Setup (Backend Proxy)
 
-If you need to deploy your own free proxy on Cloudflare Workers:
+To deploy your own free proxy on Cloudflare Workers:
 
 1. Log in to the [Cloudflare Dashboard](https://dash.cloudflare.com/) and navigate to **Workers & Pages** → **Create Application** → **Create Worker**.
 2. Paste the following worker script into the editor:
@@ -163,28 +160,6 @@ export default {
       });
 
       if (!response.ok) {
-        return new Response(`Goodreads returned status ${response.status}`, {
-          status: response.status,
-          headers: { "Access-Control-Allow-Origin": "*" }
-        });
-      }
-
-      const xmlData = await response.text();
-
-      return new Response(xmlData, {
-        headers: {
-          "Content-Type": "application/xml; charset=utf-8",
-          "Access-Control-Allow-Origin": "*",
-          "Cache-Control": "public, max-age=1800" // Cache for 30 minutes
-        }
-      });
-    } catch (err) {
-      return new Response(err.message, {
-        status: 500,
-        headers: { "Access-Control-Allow-Origin": "*" }
-      });
-    }
-  }
 };
 ```
 3. Click **Deploy**. Copy your `*.workers.dev` URL into `GoodreadsService.js`.
@@ -205,23 +180,9 @@ export default {
 
 ---
 
-## 📂 Project Structure
-
-```text
-├── index.html                  # HTML layout and WebGL container widget
-├── main.js                     # App initialization, lighting, platforms, and loop
-├── GoodreadsService.js         # RSS feed parser, ID extraction, and image proxying
-├── BookStackModule.js          # Procedural geometry, multi-materials, and jitter algorithm
-├── BackCoverGenerator.js       # Dynamic 2D canvas palette extraction for back covers & spines
-├── StickyNoteModule.js         # Morph-target curling sticky note for user reviews
-└── BookInteractionController.js # Raycasting, GSAP animations, drag-to-pan, and wheel zoom
-```
-
----
-
 ## 📄 Dependencies
 
 * [Three.js](https://threejs.org/) (r160+) - 3D Scene graph, materials, and WebGL rendering.
 * [GSAP](https://greensock.com/gsap/) (3.12+) - High-performance transform and quaternion slerp tweening.
 * [wsrv.nl](https://images.weserv.nl/) - Zero-config CORS image cache used for canvas pixel analysis.
-```
+        return
