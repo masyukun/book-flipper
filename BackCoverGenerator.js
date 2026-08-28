@@ -2,14 +2,13 @@ import * as THREE from 'three';
 
 /**
  * Extracts dominant and accent colors directly from an HTMLImageElement using an offscreen canvas.
- * Computes contrast ratios to ensure legibility of body and title text.
  */
-function extractPaletteFromImage(imageElement) {
+export function extractPaletteFromImage(imageElement) {
   const sampleCanvas = document.createElement('canvas');
   sampleCanvas.width = 32;
   sampleCanvas.height = 32;
   const ctx = sampleCanvas.getContext('2d', { willReadFrequently: true });
-  
+
   ctx.drawImage(imageElement, 0, 0, 32, 32);
   const data = ctx.getImageData(0, 0, 32, 32).data;
 
@@ -30,7 +29,6 @@ function extractPaletteFromImage(imageElement) {
   g = Math.round(g / count);
   b = Math.round(b / count);
 
-  // Perceived luminance (ITU-R BT.709)
   const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
   const isDark = luminance < 0.55;
 
@@ -40,14 +38,79 @@ function extractPaletteFromImage(imageElement) {
     isDark,
     textPrimary: isDark ? '#ffffff' : '#14171a',
     textSecondary: isDark ? 'rgba(255, 255, 255, 0.75)' : 'rgba(20, 23, 26, 0.75)',
-    accent: isDark ? '#f4c430' : '#b8860b', // Gold star rating accent
+    accent: isDark ? '#f4c430' : '#b8860b',
     ruleColor: isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.12)'
   };
 }
 
 /**
- * Draws a 5-pointed vector star onto the 2D canvas context.
+ * Generates a dynamic canvas texture for the book spine.
  */
+export function generateSpineTexture(metadata, palette) {
+  const canvas = document.createElement('canvas');
+  // Width matches book height (along length of spine), Height matches spine thickness
+  canvas.width = 1536;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+
+  const [r, g, b] = palette.backgroundRgb || [40, 50, 65];
+
+  // 1. Base spine background
+  ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // 2. Spine curvature shadow/highlight gradient (simulates rounded cylindrical spine)
+  const curveGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  curveGrad.addColorStop(0, 'rgba(0, 0, 0, 0.45)');     // Top edge hinge shadow
+  curveGrad.addColorStop(0.18, 'rgba(0, 0, 0, 0.05)');
+  curveGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.15)'); // Center specular highlight
+  curveGrad.addColorStop(0.82, 'rgba(0, 0, 0, 0.05)');
+  curveGrad.addColorStop(1, 'rgba(0, 0, 0, 0.5)');      // Bottom edge hinge shadow
+  ctx.fillStyle = curveGrad;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // 3. Head & Tail decorative bands (left & right ends of canvas)
+  ctx.strokeStyle = palette.ruleColor || 'rgba(255, 255, 255, 0.2)';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(90, 20);
+  ctx.lineTo(90, canvas.height - 20);
+  ctx.moveTo(canvas.width - 90, 20);
+  ctx.lineTo(canvas.width - 90, canvas.height - 20);
+  ctx.stroke();
+
+  // 4. Spine Title (reads from head toward tail)
+  ctx.fillStyle = palette.textPrimary;
+  ctx.font = 'bold 64px "Georgia", serif';
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+
+  const titleText = (metadata.title || 'Untitled').toUpperCase();
+  const maxTitleWidth = canvas.width - 520;
+
+  // Truncate title if it exceeds spine length
+  let displayTitle = titleText;
+  if (ctx.measureText(displayTitle).width > maxTitleWidth) {
+    while (displayTitle.length > 0 && ctx.measureText(displayTitle + '…').width > maxTitleWidth) {
+      displayTitle = displayTitle.slice(0, -1);
+    }
+    displayTitle += '…';
+  }
+  ctx.fillText(displayTitle, 130, canvas.height / 2);
+
+  // 5. Spine Author (placed near the tail end)
+  ctx.fillStyle = palette.textSecondary;
+  ctx.font = 'italic 46px "Georgia", serif';
+  ctx.textAlign = 'right';
+  const authorText = metadata.author || '';
+  ctx.fillText(authorText, canvas.width - 130, canvas.height / 2);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  return texture;
+}
+
 function drawStar(ctx, cx, cy, spikes, outerRadius, innerRadius, fillPercent = 1) {
   let rot = (Math.PI / 2) * 3;
   let x = cx;
@@ -82,11 +145,8 @@ function drawStar(ctx, cx, cy, spikes, outerRadius, innerRadius, fillPercent = 1
   ctx.stroke();
 }
 
-/**
- * Word-wraps text within a maximum width and clamps to a maximum line count.
- */
 function wrapAndRenderText(ctx, text, x, y, maxWidth, lineHeight, maxLines) {
-  const words = text.replace(/<[^>]*>?/gm, '').split(' '); // Strip any HTML tags
+  const words = text.replace(/<[^>]*>?/gm, '').split(' ');
   let line = '';
   let linesDrawn = 0;
 
@@ -111,42 +171,15 @@ function wrapAndRenderText(ctx, text, x, y, maxWidth, lineHeight, maxLines) {
   return y + lineHeight;
 }
 
-/**
- * Renders a back cover dynamically onto an offscreen canvas and returns a THREE.CanvasTexture.
- *
- * @param {Object} metadata
- * @param {string} metadata.title
- * @param {string} metadata.author
- * @param {number} [metadata.rating=0] - Numerical rating (0.0 to 5.0)
- * @param {number} [metadata.ratingsCount=0]
- * @param {number} [metadata.pageCount=0]
- * @param {string} [metadata.description=''] - Synopsis or Goodreads review blurb
- * @param {string} [metadata.isbn='']
- * @param {HTMLImageElement} [coverImage] - Preloaded front cover image element for color extraction
- * @returns {THREE.CanvasTexture}
- */
-export function generateBackCoverTexture(metadata, coverImage = null) {
+export function generateBackCoverTexture(metadata, palette) {
   const canvas = document.createElement('canvas');
   canvas.width = 1024;
   canvas.height = 1536;
   const ctx = canvas.getContext('2d');
 
-  // Derive color scheme
-  const palette = coverImage
-    ? extractPaletteFromImage(coverImage)
-    : {
-        background: '#1a1f2c',
-        isDark: true,
-        textPrimary: '#ffffff',
-        textSecondary: 'rgba(255, 255, 255, 0.75)',
-        accent: '#f4c430',
-        ruleColor: 'rgba(255, 255, 255, 0.15)'
-      };
-
   const padX = 80;
   const contentWidth = canvas.width - padX * 2;
 
-  // 1. Background fill & subtle vignette gradient
   const [r, g, b] = palette.backgroundRgb || [26, 31, 44];
   const bgGrad = ctx.createRadialGradient(
     canvas.width / 2, canvas.height / 3, 100,
@@ -160,19 +193,19 @@ export function generateBackCoverTexture(metadata, coverImage = null) {
 
   let cursorY = 120;
 
-  // 2. Title
+  // Title
   ctx.fillStyle = palette.textPrimary;
   ctx.font = 'bold 52px "Georgia", serif';
   cursorY = wrapAndRenderText(ctx, metadata.title || 'Untitled', padX, cursorY, contentWidth, 62, 3);
   cursorY += 8;
 
-  // 3. Author
+  // Author
   ctx.fillStyle = palette.textSecondary;
   ctx.font = 'italic 34px "Georgia", serif';
   ctx.fillText(`by ${metadata.author || 'Unknown Author'}`, padX, cursorY);
   cursorY += 40;
 
-  // 4. Rating Stars & Score
+  // Rating Stars
   const rating = parseFloat(metadata.rating) || 0;
   const starRadius = 18;
   const starGap = 44;
@@ -186,7 +219,6 @@ export function generateBackCoverTexture(metadata, coverImage = null) {
     drawStar(ctx, padX + starRadius + i * starGap, cursorY, 5, starRadius, starRadius * 0.45, fill);
   }
 
-  // Numerical score & ratings count
   ctx.fillStyle = palette.textPrimary;
   ctx.font = 'bold 30px "Helvetica Neue", sans-serif';
   const ratingText = rating > 0 ? rating.toFixed(2) : 'Unrated';
@@ -200,7 +232,7 @@ export function generateBackCoverTexture(metadata, coverImage = null) {
 
   cursorY += 45;
 
-  // 5. Divider Rule
+  // Divider
   ctx.strokeStyle = palette.ruleColor;
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -210,15 +242,14 @@ export function generateBackCoverTexture(metadata, coverImage = null) {
 
   cursorY += 55;
 
-  // 6. Blurb / Synopsis Text
+  // Description
   ctx.fillStyle = palette.textPrimary;
   ctx.font = '32px "Georgia", serif';
   const synopsis = metadata.description || 'No description available for this edition.';
   wrapAndRenderText(ctx, synopsis, padX, cursorY, contentWidth, 48, 14);
 
-  // 7. Footer Metadata (Pages & ISBN Barcode visual)
+  // Footer
   const footerY = canvas.height - 90;
-
   ctx.strokeStyle = palette.ruleColor;
   ctx.beginPath();
   ctx.moveTo(padX, footerY - 35);
@@ -231,13 +262,12 @@ export function generateBackCoverTexture(metadata, coverImage = null) {
   const isbnLabel = metadata.isbn ? `ISBN: ${metadata.isbn}` : '';
   ctx.fillText([pageLabel, isbnLabel].filter(Boolean).join('  •  '), padX, footerY);
 
-  // Build Three.js Texture
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.minFilter = THREE.LinearFilter;
   texture.generateMipmaps = true;
 
-  // Invert the texture 180° so it maps rightside-up on the mesh
+  // Invert 180° for physical end-over-end orientation
   texture.center.set(0.5, 0.5);
   texture.rotation = Math.PI;
 
@@ -245,17 +275,35 @@ export function generateBackCoverTexture(metadata, coverImage = null) {
 }
 
 /**
- * Loads the front cover image, extracts its palette, and updates the book mesh's back cover material.
- *
- * @param {THREE.Mesh} bookMesh
- * @param {Object} metadata
+ * Unified loader: loads cover image, derives palette, and applies both back cover and spine textures.
  */
-export function attachDynamicBackCover(bookMesh, metadata) {
-  if (!metadata.coverUrl) {
-    // Generate fallback texture immediately without image palette
-    const defaultBackTexture = generateBackCoverTexture(metadata, null);
-    bookMesh.material[3].map = defaultBackTexture;
+export function attachDynamicCoversAndSpine(bookMesh, metadata) {
+  const defaultPalette = {
+    background: '#1a1f2c',
+    backgroundRgb: [26, 31, 44],
+    isDark: true,
+    textPrimary: '#ffffff',
+    textSecondary: 'rgba(255, 255, 255, 0.75)',
+    accent: '#f4c430',
+    ruleColor: 'rgba(255, 255, 255, 0.15)'
+  };
+
+  const applyTextures = (palette) => {
+    // Spine (-X face -> material index 1)
+    const spineTexture = generateSpineTexture(metadata, palette);
+    bookMesh.material[1].map = spineTexture;
+    bookMesh.material[1].color.set(0xffffff);
+    bookMesh.material[1].needsUpdate = true;
+
+    // Back cover (-Y face -> material index 3)
+    const backTexture = generateBackCoverTexture(metadata, palette);
+    bookMesh.material[3].map = backTexture;
+    bookMesh.material[3].color.set(0xffffff);
     bookMesh.material[3].needsUpdate = true;
+  };
+
+  if (!metadata.coverUrl) {
+    applyTextures(defaultPalette);
     return;
   }
 
@@ -264,20 +312,11 @@ export function attachDynamicBackCover(bookMesh, metadata) {
   img.src = metadata.coverUrl;
 
   img.onload = () => {
-    // 1. Generate back cover using extracted palette
-    const backTexture = generateBackCoverTexture(metadata, img);
-
-    // 2. Assign to the bottom (-Y) face of BoxGeometry
-    bookMesh.material[3].map = backTexture;
-    bookMesh.material[3].color.set(0xffffff);
-    bookMesh.material[3].needsUpdate = true;
+    const palette = extractPaletteFromImage(img);
+    applyTextures(palette);
   };
 
   img.onerror = () => {
-    // Fallback if cover image fails to load or hits CORS issues
-    const fallbackTexture = generateBackCoverTexture(metadata, null);
-    bookMesh.material[3].map = fallbackTexture;
-    bookMesh.material[3].color.set(0xffffff);
-    bookMesh.material[3].needsUpdate = true;
+    applyTextures(defaultPalette);
   };
 }
