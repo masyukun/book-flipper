@@ -21,6 +21,7 @@ class BookShowcaseApp {
     this.initPlatforms();
     this.loadLiveData();
     this.initResizeObserver();
+    this.initFullscreen();
     this.animate();
   }
 
@@ -145,6 +146,43 @@ class BookShowcaseApp {
     });
 
     resizeObserver.observe(this.container);
+  }
+
+  initFullscreen() {
+    const btn = document.getElementById('fullscreen-btn');
+    if (!btn) return;
+
+    const expandIcon = btn.querySelector('.icon-expand');
+    const compressIcon = btn.querySelector('.icon-compress');
+
+    const toggleFullscreen = () => {
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        if (this.container.requestFullscreen) {
+          this.container.requestFullscreen();
+        } else if (this.container.webkitRequestFullscreen) {
+          this.container.webkitRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        }
+      }
+    };
+
+    btn.addEventListener('click', toggleFullscreen);
+
+    // Sync button icon state whenever entering or exiting fullscreen (including via Escape key)
+    const onFullscreenChange = () => {
+      const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement);
+      expandIcon.style.display = isFullscreen ? 'none' : 'block';
+      compressIcon.style.display = isFullscreen ? 'block' : 'none';
+      btn.setAttribute('title', isFullscreen ? 'Exit Fullscreen (Esc)' : 'Toggle Fullscreen');
+    };
+
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
   }
 
   animate = () => {

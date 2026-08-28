@@ -74,6 +74,57 @@
       letter-spacing: 0.05em;
       text-transform: uppercase;
     }
+    /* Fullscreen Toggle Button */
+    .fullscreen-btn {
+      position: absolute;
+      top: 1.25rem;
+      right: 1.5rem;
+      z-index: 10;
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 10px;
+      color: rgba(255, 255, 255, 0.85);
+      cursor: pointer;
+      transition: background 0.2s ease, transform 0.15s ease, color 0.2s ease;
+    }
+
+    .fullscreen-btn:hover {
+      background: rgba(255, 255, 255, 0.18);
+      color: #ffffff;
+      transform: scale(1.05);
+    }
+
+    .fullscreen-btn:active {
+      transform: scale(0.95);
+    }
+
+    /* Container rules when fullscreen is active */
+    .bookshelf-widget:fullscreen {
+      max-width: 100vw;
+      width: 100vw;
+      height: 100vh;
+      margin: 0;
+      border-radius: 0;
+      border: none;
+    }
+
+    /* Safari / WebKit vendor pseudo-class */
+    .bookshelf-widget:-webkit-full-screen {
+      max-width: 100vw;
+      width: 100vw;
+      height: 100vh;
+      margin: 0;
+      border-radius: 0;
+      border: none;
+    }
   </style>
 
   <script type="importmap">
@@ -89,9 +140,21 @@
 
   <div class="bookshelf-widget" id="bookshelf-container">
     <div class="widget-header">
-      <h3>Matthew's Goodreads Shelf</h3>
+      <h3>Library Shelf</h3>
       <p>Click any book to inspect • Click again to flip</p>
     </div>
+
+    <!-- Fullscreen Toggle Button -->
+    <button id="fullscreen-btn" class="fullscreen-btn" aria-label="Toggle Fullscreen" title="Toggle Fullscreen">
+      <!-- Expand Icon -->
+      <svg class="icon-expand" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+      </svg>
+      <!-- Compress Icon -->
+      <svg class="icon-compress" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/>
+      </svg>
+    </button>
 
     <canvas id="webgl-canvas"></canvas>
 
