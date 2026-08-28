@@ -155,8 +155,10 @@ export class BookInteractionController {
 
     this.cameraRig.position.set(0, 0, -distance);
 
+    // Math.PI / 2 points the front cover (+Y) toward the camera.
+    // flipAngle rotates around Z by 180° to show the back cover upright.
     const flipAngle = flipped ? Math.PI : 0;
-    this.cameraRig.rotation.set(-Math.PI / 2, 0, flipAngle);
+    this.cameraRig.rotation.set(Math.PI / 2, 0, flipAngle);
     this.cameraRig.updateMatrixWorld();
 
     const targetPos = new THREE.Vector3();
