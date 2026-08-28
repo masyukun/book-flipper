@@ -32,8 +32,10 @@ class BookShowcaseApp {
     this.scene = new THREE.Scene();
 
     this.camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 50);
-    this.camera.position.set(0, 2.8, 5.8);
-    this.camera.lookAt(0, 0.6, 0);
+    
+    // Raised camera slightly and shifted lookAt target from Y: 0.6 up to Y: 1.05
+    this.camera.position.set(0, 3.0, 5.7);
+    this.camera.lookAt(0, 1.50, 0);
 
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
