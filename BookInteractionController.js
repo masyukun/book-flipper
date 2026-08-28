@@ -29,11 +29,20 @@ export class BookInteractionController {
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
     this.pointerDownPos = new THREE.Vector2();
+    this.lastPointerPos = new THREE.Vector2();
 
     this.activeBook = null;
     this.hoveredBook = null;
     this.isAnimating = false;
     this.isFlipped = false;
+
+    // Pan & Zoom state for focused inspection
+    this.zoomLevel = 1.0;
+    this.minZoom = 0.6;
+    this.maxZoom = 3.0;
+    this.panOffset = new THREE.Vector2(0, 0); // Screen-space X/Y offset
+    this.isDragging = false;
+    this.isPointerDownOnBook = false;
 
     // Helper dummy object for calculating camera-relative orientation
     this.cameraRig = new THREE.Object3D();
@@ -46,10 +55,12 @@ export class BookInteractionController {
     this._onPointerDown = this.onPointerDown.bind(this);
     this._onPointerUp = this.onPointerUp.bind(this);
     this._onPointerMove = this.onPointerMove.bind(this);
+    this._onWheel = this.onWheel.bind(this);
 
     this.domElement.addEventListener('pointerdown', this._onPointerDown);
     this.domElement.addEventListener('pointerup', this._onPointerUp);
     this.domElement.addEventListener('pointermove', this._onPointerMove);
+    this.domElement.addEventListener('wheel', this._onWheel, { passive: false });
   }
 
   updateMouseCoords(event) {
@@ -58,37 +69,178 @@ export class BookInteractionController {
     this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   }
 
+  /**
+   * Calculates the base focus distance based on book height and camera FOV
+   */
+  getBaseFocusDistance(bookMesh = this.activeBook) {
+    if (bookMesh && bookMesh.userData?.dimensions) {
+      const bookHeight = bookMesh.userData.dimensions.height || 2.1;
+      const vFovRad = THREE.MathUtils.degToRad(this.camera.fov);
+      const targetScreenCoverage = 0.65;
+      return (bookHeight / (2 * Math.tan(vFovRad / 2))) / targetScreenCoverage;
+    }
+    return this.focusDistance;
+  }
+
+  /**
+   * Calculates world position and quaternion for the focused book
+   */
+  calculateFocusTransform(flipped = this.isFlipped, bookMesh = this.activeBook) {
+    const baseDist = this.getBaseFocusDistance(bookMesh);
+    const currentDist = baseDist / this.zoomLevel;
+
+    // Position camera rig with pan and zoom applied in camera space
+    this.cameraRig.position.set(this.panOffset.x, this.panOffset.y, -currentDist);
+
+    // End-over-end flip (+Y faces camera, flipped on Z)
+    const flipAngle = flipped ? Math.PI : 0;
+    this.cameraRig.rotation.set(Math.PI / 2, 0, flipAngle);
+    this.cameraRig.updateMatrixWorld();
+
+    const targetPos = new THREE.Vector3();
+    const targetQuat = new THREE.Quaternion();
+
+    this.cameraRig.getWorldPosition(targetPos);
+    this.cameraRig.getWorldQuaternion(targetQuat);
+
+    return { targetPos, targetQuat, currentDist };
+  }
+
+  onWheel(event) {
+    if (!this.activeBook || this.isAnimating) return;
+
+    // Prevent full-page scroll while interacting with the book
+    event.preventDefault();
+
+    const zoomDelta = -event.deltaY * 0.0015;
+    const nextZoom = THREE.MathUtils.clamp(this.zoomLevel + zoomDelta, this.minZoom, this.maxZoom);
+
+    if (nextZoom === this.zoomLevel) return;
+    this.zoomLevel = nextZoom;
+
+    const { targetPos } = this.calculateFocusTransform();
+
+    gsap.to(this.activeBook.position, {
+      x: targetPos.x,
+      y: targetPos.y,
+      z: targetPos.z,
+      duration: 0.15,
+      ease: 'power1.out',
+      overwrite: 'auto'
+    });
+  }
+
+  onPointerDown(event) {
+    this.pointerDownPos.set(event.clientX, event.clientY);
+    this.lastPointerPos.set(event.clientX, event.clientY);
+    this.isDragging = false;
+
+    if (this.activeBook && !this.isAnimating) {
+      this.updateMouseCoords(event);
+      this.raycaster.setFromCamera(this.mouse, this.camera);
+      const intersects = this.raycaster.intersectObject(this.activeBook, false);
+
+      if (intersects.length > 0) {
+        this.isPointerDownOnBook = true;
+      }
+    }
+  }
+
   onPointerMove(event) {
     if (this.isAnimating) return;
 
+    // 1. Dragging / Panning the focused book
+    if (this.isPointerDownOnBook && this.activeBook) {
+      const deltaX = event.clientX - this.lastPointerPos.x;
+      const deltaY = event.clientY - this.lastPointerPos.y;
+
+      const totalDistMoved = this.pointerDownPos.distanceTo(new THREE.Vector2(event.clientX, event.clientY));
+      if (!this.isDragging && totalDistMoved > 4) {
+        this.isDragging = true;
+      }
+
+      if (this.isDragging) {
+        this.domElement.style.cursor = 'grabbing';
+
+        const rect = this.domElement.getBoundingClientRect();
+        const vFovRad = THREE.MathUtils.degToRad(this.camera.fov);
+        const { currentDist } = this.calculateFocusTransform();
+
+        // Convert pixel delta into camera-plane world distance
+        const visibleHeight = 2 * currentDist * Math.tan(vFovRad / 2);
+        const visibleWidth = visibleHeight * (rect.width / rect.height);
+
+        const worldDeltaX = (deltaX / rect.width) * visibleWidth;
+        const worldDeltaY = -(deltaY / rect.height) * visibleHeight;
+
+        this.panOffset.x += worldDeltaX;
+        this.panOffset.y += worldDeltaY;
+
+        // Apply immediately during drag
+        const { targetPos } = this.calculateFocusTransform();
+        this.activeBook.position.copy(targetPos);
+      }
+
+      this.lastPointerPos.set(event.clientX, event.clientY);
+      return;
+    }
+
+    // 2. Regular hover state tracking
     this.updateMouseCoords(event);
     this.raycaster.setFromCamera(this.mouse, this.camera);
     const intersects = this.raycaster.intersectObjects(this.clickableBooks, false);
 
-    // 1. Hovering while a book is in focus
     if (this.activeBook) {
       if (intersects.length > 0 && intersects[0].object === this.activeBook) {
-        this.domElement.style.cursor = 'pointer'; // Ready to flip
+        this.domElement.style.cursor = 'grab';
       } else {
         this.domElement.style.cursor = 'default';
       }
       return;
     }
 
-    // 2. Hovering books in the stack
+    // Stack Hovering
     if (intersects.length > 0) {
       const hitBook = intersects[0].object;
-
       if (this.hoveredBook !== hitBook) {
         this.clearHover();
         this.setHover(hitBook);
       }
       this.domElement.style.cursor = 'pointer';
     } else {
-      if (this.hoveredBook) {
-        this.clearHover();
-      }
+      if (this.hoveredBook) this.clearHover();
       this.domElement.style.cursor = 'default';
+    }
+  }
+
+  onPointerUp(event) {
+    const wasDragging = this.isDragging;
+    this.isDragging = false;
+    this.isPointerDownOnBook = false;
+
+    if (this.isAnimating) return;
+
+    // If the user was dragging the book, don't trigger a flip or unfocus
+    if (wasDragging) {
+      if (this.activeBook) this.domElement.style.cursor = 'grab';
+      return;
+    }
+
+    this.updateMouseCoords(event);
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    const intersects = this.raycaster.intersectObjects(this.clickableBooks, false);
+
+    if (intersects.length > 0) {
+      const hitBook = intersects[0].object;
+      if (this.activeBook === hitBook) {
+        // Quick click on the focused book flips it
+        this.flipBook();
+      } else {
+        this.focusBook(hitBook);
+      }
+    } else if (this.activeBook) {
+      // Clicked outside the book -> return to stack
+      this.unfocusCurrentBook();
     }
   }
 
@@ -106,7 +258,6 @@ export class BookInteractionController {
 
   clearHover() {
     if (!this.hoveredBook) return;
-
     const book = this.hoveredBook;
     const restY = book.userData.restPosition.y;
     this.hoveredBook = null;
@@ -119,62 +270,12 @@ export class BookInteractionController {
     });
   }
 
-  onPointerDown(event) {
-    this.pointerDownPos.set(event.clientX, event.clientY);
-  }
-
-  onPointerUp(event) {
-    const moveDistance = this.pointerDownPos.distanceTo(new THREE.Vector2(event.clientX, event.clientY));
-    if (moveDistance > 5 || this.isAnimating) return;
-
-    this.updateMouseCoords(event);
-    this.raycaster.setFromCamera(this.mouse, this.camera);
-    const intersects = this.raycaster.intersectObjects(this.clickableBooks, false);
-
-    if (intersects.length > 0) {
-      const hitBook = intersects[0].object;
-      if (this.activeBook === hitBook) {
-        this.flipBook();
-      } else {
-        this.focusBook(hitBook);
-      }
-    } else if (this.activeBook) {
-      this.unfocusCurrentBook();
-    }
-  }
-
-  calculateFocusTransform(flipped = false, bookMesh = this.activeBook) {
-    let distance = this.focusDistance;
-
-    if (bookMesh && bookMesh.userData?.dimensions) {
-      const bookHeight = bookMesh.userData.dimensions.height || 2.1;
-      const vFovRad = THREE.MathUtils.degToRad(this.camera.fov);
-      const targetScreenCoverage = 0.65;
-      distance = (bookHeight / (2 * Math.tan(vFovRad / 2))) / targetScreenCoverage;
-    }
-
-    this.cameraRig.position.set(0, 0, -distance);
-
-    // Math.PI / 2 points the front cover (+Y) toward the camera.
-    // flipAngle rotates around Z by 180° to show the back cover upright.
-    const flipAngle = flipped ? Math.PI : 0;
-    this.cameraRig.rotation.set(Math.PI / 2, 0, flipAngle);
-    this.cameraRig.updateMatrixWorld();
-
-    const targetPos = new THREE.Vector3();
-    const targetQuat = new THREE.Quaternion();
-
-    this.cameraRig.getWorldPosition(targetPos);
-    this.cameraRig.getWorldQuaternion(targetQuat);
-
-    return { targetPos, targetQuat };
-  }
-
   focusBook(bookMesh) {
     this.isAnimating = true;
     this.isFlipped = false;
+    this.zoomLevel = 1.0;
+    this.panOffset.set(0, 0);
 
-    // Reset hover state so the mesh doesn't retain the +Y hover offset
     if (this.hoveredBook === bookMesh) {
       this.hoveredBook = null;
       bookMesh.position.y = bookMesh.userData.restPosition.y;
@@ -201,6 +302,7 @@ export class BookInteractionController {
       onComplete: () => {
         this.isAnimating = false;
         bookMesh.userData.isFocused = true;
+        this.domElement.style.cursor = 'grab';
       }
     })
       .to(bookMesh.position, {
@@ -289,6 +391,8 @@ export class BookInteractionController {
     const book = this.activeBook;
     this.activeBook = null;
     this.isFlipped = false;
+    this.zoomLevel = 1.0;
+    this.panOffset.set(0, 0);
     this.domElement.style.cursor = 'default';
 
     this.returnBookToStack(book);
@@ -301,6 +405,7 @@ export class BookInteractionController {
     this.domElement.removeEventListener('pointerdown', this._onPointerDown);
     this.domElement.removeEventListener('pointerup', this._onPointerUp);
     this.domElement.removeEventListener('pointermove', this._onPointerMove);
+    this.domElement.removeEventListener('wheel', this._onWheel);
     this.camera.remove(this.cameraRig);
     this.domElement.style.cursor = 'default';
   }
