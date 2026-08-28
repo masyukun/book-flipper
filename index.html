@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Goodreads 3D Reading Stack</title>
+  <style>
+    /* Widget container styles */
+    .bookshelf-widget {
+      position: relative;
+      width: 100%;
+      max-width: 960px;
+      height: 580px;
+      margin: 2rem auto;
+      border-radius: 16px;
+      overflow: hidden;
+      background: radial-gradient(circle at center, #1e2530 0%, #0d1117 100%);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    /* WebGL Canvas fills the container */
+    #webgl-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      outline: none;
+      cursor: grab;
+    }
+    #webgl-canvas:active {
+      cursor: grabbing;
+    }
+
+    /* UI Overlays */
+    .widget-header {
+      position: absolute;
+      top: 1.25rem;
+      left: 1.5rem;
+      pointer-events: none;
+      color: #fff;
+    }
+    .widget-header h3 {
+      margin: 0;
+      font-size: 1.2rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    .widget-header p {
+      margin: 0.25rem 0 0;
+      font-size: 0.85rem;
+      color: rgba(255, 255, 255, 0.55);
+    }
+
+    .shelf-labels {
+      position: absolute;
+      bottom: 1.25rem;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: space-around;
+      pointer-events: none;
+      padding: 0 4rem;
+    }
+    .shelf-pill {
+      background: rgba(255, 255, 255, 0.07);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 0.4rem 0.9rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.85);
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+  </style>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "gsap": "https://unpkg.com/gsap@3.12.5/index.js"
+      }
+    }
+  </script>
+</head>
+<body>
+
+  <div class="bookshelf-widget" id="bookshelf-container">
+    <div class="widget-header">
+      <h3>Library Shelf</h3>
+      <p>Click any book to inspect • Click again to flip</p>
+    </div>
+
+    <canvas id="webgl-canvas"></canvas>
+
+    <div class="shelf-labels">
+      <div class="shelf-pill">To Be Read</div>
+      <div class="shelf-pill">Recently Read</div>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
