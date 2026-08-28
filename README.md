@@ -1,5 +1,7 @@
 # 📚 3D Interactive Goodreads Bookshelf
 
+![Screenshot of the finished 3D Interactive Goodreads Bookshelf](screenshot-1.0.0.png)
+
 An interactive 3D WebGL bookshelf widget built with **Three.js** and **GSAP**. It connects to public Goodreads shelves to procedurally render dynamic, natural-looking stacks of books for your **"To Be Read"** and **"Recently Read"** lists.
 
 Each book features procedural dimensions derived from page counts, dynamic palette-matched spine and back-cover generation, morphing sticky-note reviews, smooth focus transitions, panning, and zoom inspection.
