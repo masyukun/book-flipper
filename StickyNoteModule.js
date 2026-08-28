@@ -20,7 +20,7 @@ export function createStickyNoteTexture(reviewText = '', rating = null) {
   // Note Header
   ctx.fillStyle = '#2b2608';
   ctx.font = 'bold 30px "Caveat", "Bradley Hand", "Comic Sans MS", cursive, sans-serif';
-  ctx.fillText("Reader's Note ✍️", 36, 44);
+  ctx.fillText("Matthew's Note ✍️", 36, 44);
 
   let cursorY = 100;
 
