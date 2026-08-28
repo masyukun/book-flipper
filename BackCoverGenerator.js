@@ -237,6 +237,10 @@ export function generateBackCoverTexture(metadata, coverImage = null) {
   texture.minFilter = THREE.LinearFilter;
   texture.generateMipmaps = true;
 
+  // Invert the texture 180° so it maps rightside-up on the mesh
+  texture.center.set(0.5, 0.5);
+  texture.rotation = Math.PI;
+
   return texture;
 }
 
