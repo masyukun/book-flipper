@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createStickyNoteMesh } from './StickyNoteModule.js';
 
 /**
  * Configuration & tuning constants (all units normalized to ~1 unit = 10 cm)
@@ -138,8 +139,6 @@ export function createBookMaterials(metadata, textureLoader = new THREE.TextureL
  */
 export function createBookMesh(metadata, textureLoader) {
   const { width, height, thickness } = calculateBookDimensions(metadata);
-
-  // Width = X, Thickness = Y (stacked vertically), Height = Z
   const geometry = new THREE.BoxGeometry(width, thickness, height);
   const materials = createBookMaterials(metadata, textureLoader);
 
@@ -154,6 +153,17 @@ export function createBookMesh(metadata, textureLoader) {
     restPosition: new THREE.Vector3(),
     restRotation: new THREE.Euler()
   };
+
+  // Attach optional sticky note if a review is provided
+  if (metadata.review) {
+    const stickyNote = createStickyNoteMesh(
+      metadata.review,
+      { width, height, thickness },
+      metadata.myRating || metadata.rating
+    );
+    mesh.add(stickyNote);
+    mesh.userData.stickyNote = stickyNote;
+  }
 
   return mesh;
 }

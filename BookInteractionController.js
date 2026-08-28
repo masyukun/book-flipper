@@ -138,8 +138,17 @@ export class BookInteractionController {
     if (this.activeBook && !this.isAnimating) {
       this.updateMouseCoords(event);
       this.raycaster.setFromCamera(this.mouse, this.camera);
-      const intersects = this.raycaster.intersectObject(this.activeBook, false);
-
+      
+      // Sticky note
+      const intersects = this.raycaster.intersectObjects(this.clickableBooks, true);
+      if (intersects.length > 0) {
+        const hit = intersects[0].object;
+        if (hit.userData?.isStickyNote) {
+          this.domElement.style.cursor = 'pointer';
+          return;
+        }
+      }
+      
       if (intersects.length > 0) {
         this.isPointerDownOnBook = true;
       }
@@ -211,6 +220,7 @@ export class BookInteractionController {
       if (this.hoveredBook) this.clearHover();
       this.domElement.style.cursor = 'default';
     }
+
   }
 
   onPointerUp(event) {
@@ -219,8 +229,6 @@ export class BookInteractionController {
     this.isPointerDownOnBook = false;
 
     if (this.isAnimating) return;
-
-    // If the user was dragging the book, don't trigger a flip or unfocus
     if (wasDragging) {
       if (this.activeBook) this.domElement.style.cursor = 'grab';
       return;
@@ -228,18 +236,31 @@ export class BookInteractionController {
 
     this.updateMouseCoords(event);
     this.raycaster.setFromCamera(this.mouse, this.camera);
-    const intersects = this.raycaster.intersectObjects(this.clickableBooks, false);
+
+    // Raycast recursively (true) to detect child sticky notes
+    const intersects = this.raycaster.intersectObjects(this.clickableBooks, true);
 
     if (intersects.length > 0) {
-      const hitBook = intersects[0].object;
+      const hitObject = intersects[0].object;
+
+      // 1. Clicked directly on the Sticky Note
+      if (hitObject.userData?.isStickyNote) {
+        hitObject.userData.toggleCurl();
+        return;
+      }
+
+      // 2. Find parent book mesh
+      let hitBook = hitObject;
+      while (hitBook && !hitBook.userData?.dimensions && hitBook.parent) {
+        hitBook = hitBook.parent;
+      }
+
       if (this.activeBook === hitBook) {
-        // Quick click on the focused book flips it
         this.flipBook();
       } else {
         this.focusBook(hitBook);
       }
     } else if (this.activeBook) {
-      // Clicked outside the book -> return to stack
       this.unfocusCurrentBook();
     }
   }

@@ -93,7 +93,7 @@ class BookShowcaseApp {
     ];
 
     const completedBooks = [
-      { id: 4, title: 'Project Hail Mary', author: 'Andy Weir', pageCount: 496, rating: 4.51, ratingsCount: 680000, description: 'Ryland Grace is the sole survivor on a desperate, last-chance mission.', coverUrl: 'https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1597695864i/54493401.jpg' },
+      { id: 4, title: 'Project Hail Mary', author: 'Andy Weir', pageCount: 496, rating: 4.51, ratingsCount: 680000, description: 'Ryland Grace is the sole survivor on a desperate, last-chance mission.', coverUrl: 'https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1597695864i/54493401.jpg', review: "Amaze! Amaze! Rocky is one of my favorite sci-fi characters ever written. Pure fun from start to finish." },
       { id: 5, title: 'Recursion', author: 'Blake Crouch', pageCount: 336, rating: 4.16, ratingsCount: 210000, description: 'Memory makes reality. That is what NYC cop Barry Sutton is learning.', coverUrl: 'https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1543852086i/42046112.jpg' }
     ];
 
