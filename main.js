@@ -6,7 +6,7 @@ export const MAX_BOOKS_PER_STACK = 6;
 // ----------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { createBookStack } from './BookStackModule.js';
+import { createBookStack, createShingledShelf } from './BookStackModule.js';
 import { attachDynamicCoversAndSpine } from './BackCoverGenerator.js';
 import { BookInteractionController } from './BookInteractionController.js';
 import { fetchGoodreadsShelf } from './GoodreadsService.js';
@@ -89,28 +89,35 @@ class BookShowcaseApp {
 
   async loadLiveData() {
     try {
-      // Parallel fetch for 'to-read' and 'read' shelves
-      const [tbrBooks, completedBooks] = await Promise.all([
+      // 1. Fetch all 3 shelves in parallel
+      const [tbrBooks, completedBooks, currentBooks] = await Promise.all([
         fetchGoodreadsShelf(GOODREADS_PROFILE, 'to-read', MAX_BOOKS_PER_STACK),
-        fetchGoodreadsShelf(GOODREADS_PROFILE, 'read', MAX_BOOKS_PER_STACK)
+        fetchGoodreadsShelf(GOODREADS_PROFILE, 'read', MAX_BOOKS_PER_STACK),
+        fetchGoodreadsShelf(GOODREADS_PROFILE, 'currently-reading', 4)
       ]);
 
-      // Left Stack: "To Be Read"
+      // 2. Build the two stacks and the floating shingled shelf
       const tbrStack = createBookStack(tbrBooks, new THREE.Vector3(-1.8, 0, 0));
-      // Right Stack: "Recently Completed"
       const completedStack = createBookStack(completedBooks, new THREE.Vector3(1.8, 0, 0));
+      const currentShelf = createShingledShelf(currentBooks, new THREE.Vector3(0, 1.35, -1.6));
 
       this.scene.add(tbrStack.group);
       this.scene.add(completedStack.group);
+      this.scene.add(currentShelf.group);
 
-      const allBooks = [...tbrStack.bookMeshes, ...completedStack.bookMeshes];
+      // 3. Combine all meshes for unified textures and raycasting
+      const allBooks = [
+        ...tbrStack.bookMeshes,
+        ...completedStack.bookMeshes,
+        ...currentShelf.bookMeshes
+      ];
 
-      // Dynamically generate matching palette spines and back covers
+      // 4. Attach matching dynamic spines, back covers, and sticky notes
       allBooks.forEach(mesh => {
         attachDynamicCoversAndSpine(mesh, mesh.userData.metadata);
       });
 
-      // Initialize interaction controller (Hover, Zoom, Pan, Flip, Sticky Notes)
+      // 5. Initialize interaction controller across all shelves
       this.interactionController = new BookInteractionController({
         camera: this.camera,
         scene: this.scene,

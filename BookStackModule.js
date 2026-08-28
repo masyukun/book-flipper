@@ -155,7 +155,10 @@ export function createBookStack(booksMetadata, basePosition = new THREE.Vector3(
 
   let currentY = 0;
 
-  booksMetadata.forEach((metadata, index) => {
+  // Reversing places older books at the base (Y = 0) and the newest book on top
+  const stackOrder = [...booksMetadata].reverse();
+
+  stackOrder.forEach((metadata, index) => {
     const bookMesh = createBookMesh(metadata, textureLoader);
     const { thickness } = bookMesh.userData.dimensions;
 
@@ -166,7 +169,6 @@ export function createBookStack(booksMetadata, basePosition = new THREE.Vector3(
     const jitterYaw = (Math.random() - 0.5) * 2 * STACK_CONFIG.jitter.yaw;
 
     bookMesh.position.set(jitterX, bookCenterY, jitterZ);
-    // Base yaw of Math.PI / 2 points the -X spine directly toward the front (+Z camera)
     bookMesh.rotation.set(0, Math.PI / 2 + jitterYaw, 0);
 
     bookMesh.userData.restPosition.copy(bookMesh.position);
@@ -180,4 +182,64 @@ export function createBookStack(booksMetadata, basePosition = new THREE.Vector3(
   });
 
   return { group, bookMeshes, totalHeight: currentY };
+}
+
+/**
+ * Generates an overlapping, floating "shingled" display of books behind the main stacks
+ *
+ * @param {Array<Object>} booksMetadata - Books from the 'currently-reading' shelf
+ * @param {THREE.Vector3} basePosition - Center origin of the floating arrangement
+ * @param {Object} [options]
+ * @returns {{ group: THREE.Group, bookMeshes: Array<THREE.Mesh> }}
+ */
+export function createShingledShelf(booksMetadata, basePosition = new THREE.Vector3(0, 1.35, -1.6), options = {}) {
+  const group = new THREE.Group();
+  group.position.copy(basePosition);
+
+  const bookMeshes = [];
+  const textureLoader = new THREE.TextureLoader();
+  textureLoader.setCrossOrigin('anonymous');
+
+  const count = booksMetadata.length;
+  if (count === 0) return { group, bookMeshes };
+
+  // Spacing parameters for the shingled fan
+  const spacingX = 0.75;  // Horizontal step between overlapping covers
+  const stepZ = 0.16;     // Stagger depth to prevent polygon intersection
+  const totalWidth = (count - 1) * spacingX;
+  const startX = -totalWidth / 2;
+
+  booksMetadata.forEach((metadata, index) => {
+    const bookMesh = createBookMesh(metadata, textureLoader);
+
+    // Calculate cascading position
+    const posX = startX + index * spacingX;
+    // Layer front-to-back from left to right
+    const posZ = (index - (count - 1) / 2) * stepZ;
+    // Subtle arch: middle books float slightly higher
+    const archY = Math.sin((index / Math.max(count - 1, 1)) * Math.PI) * 0.08;
+
+    bookMesh.position.set(posX, archY, posZ);
+
+    // Orientation:
+    // 1. Math.PI / 2 on X brings front cover (+Y) facing outward toward camera (+Z)
+    // 2. -0.1 on X tilts the book back slightly (~6°) for readability from the camera angle
+    // 3. -0.3 on Y creates the classic shingled/fanned book display angle (~17°)
+    bookMesh.rotation.set(
+      Math.PI / 2 - 0.1,
+      -0.3,
+      0.04,
+      'YXZ'
+    );
+
+    // Store resting transforms so GSAP unfocus and return animations work seamlessly
+    bookMesh.userData.restPosition.copy(bookMesh.position);
+    bookMesh.userData.restRotation.copy(bookMesh.rotation);
+    bookMesh.userData.isFloatingShelf = true;
+
+    group.add(bookMesh);
+    bookMeshes.push(bookMesh);
+  });
+
+  return { group, bookMeshes };
 }
