@@ -126,6 +126,7 @@ To deploy your own free proxy on Cloudflare Workers:
 ```javascript
 export default {
   async fetch(request) {
+    // Handle CORS preflight (OPTIONS)
     if (request.method === "OPTIONS") {
       return new Response(null, {
         headers: {
@@ -141,25 +142,42 @@ export default {
     const shelf = url.searchParams.get("shelf") || "read";
 
     if (!userId) {
-      return new Response("Missing 'id' query parameter", { 
-        status: 400,
-        headers: { "Access-Control-Allow-Origin": "*" }
-      });
+      return new Response("Missing 'id' query parameter", { status: 400 });
     }
 
-    const goodreadsUrl = `[https://www.goodreads.com/review/list_rss/$](https://www.goodreads.com/review/list_rss/$){userId}?shelf=${shelf}`;
+    const goodreadsUrl = `https://www.goodreads.com/review/list_rss/${userId}?shelf=${shelf}`;
 
     try {
       const response = await fetch(goodreadsUrl, {
-        method: "GET",
         headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-          "Accept-Language": "en-US,en;q=0.9"
+          // Goodreads blocks default fetch User-Agents
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
       });
 
       if (!response.ok) {
+        return new Response(`Goodreads returned status ${response.status}`, {
+          status: response.status,
+          headers: { "Access-Control-Allow-Origin": "*" }
+        });
+      }
+
+      const xmlData = await response.text();
+
+      return new Response(xmlData, {
+        headers: {
+          "Content-Type": "application/xml; charset=utf-8",
+          "Access-Control-Allow-Origin": "*",
+          "Cache-Control": "public, max-age=3600" // Cache for 1 hour
+        }
+      });
+    } catch (err) {
+      return new Response(err.message, {
+        status: 500,
+        headers: { "Access-Control-Allow-Origin": "*" }
+      });
+    }
+  }
 };
 ```
 3. Click **Deploy**. Copy your `*.workers.dev` URL into `GoodreadsService.js`.
