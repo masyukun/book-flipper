@@ -10,12 +10,14 @@ import { createBookStack, createShingledShelf } from './BookStackModule.js';
 import { attachDynamicCoversAndSpine } from './BackCoverGenerator.js';
 import { BookInteractionController } from './BookInteractionController.js';
 import { fetchGoodreadsShelf } from './GoodreadsService.js';
+import { ModalController } from './ModalController.js';
 
 class BookShowcaseApp {
   constructor(containerId, canvasId) {
     this.container = document.getElementById(containerId);
     this.canvas = document.getElementById(canvasId);
 
+    this.modal = new ModalController();
     this.initScene();
     this.initLighting();
     this.initPlatforms();
@@ -96,17 +98,26 @@ class BookShowcaseApp {
       const [tbrBooks, completedBooks, currentBooks] = await Promise.all([
         fetchGoodreadsShelf(GOODREADS_PROFILE, 'to-read', MAX_BOOKS_PER_STACK),
         fetchGoodreadsShelf(GOODREADS_PROFILE, 'read', MAX_BOOKS_PER_STACK),
-        fetchGoodreadsShelf(GOODREADS_PROFILE, 'currently-reading', 4)
+        fetchGoodreadsShelf(GOODREADS_PROFILE, 'currently-reading', 6)
       ]);
+
+      // Clear any existing meshes if retrying
+      if (this.tbrGroup) this.scene.remove(this.tbrGroup);
+      if (this.completedGroup) this.scene.remove(this.completedGroup);
+      if (this.currentGroup) this.scene.remove(this.currentGroup);
 
       // 2. Build the two stacks and the floating shingled shelf
       const tbrStack = createBookStack(tbrBooks, new THREE.Vector3(-1.8, 0, 0));
       const completedStack = createBookStack(completedBooks, new THREE.Vector3(1.8, 0, 0));
       const currentShelf = createShingledShelf(currentBooks, new THREE.Vector3(0, 1.35, -1.6));
 
-      this.scene.add(tbrStack.group);
-      this.scene.add(completedStack.group);
-      this.scene.add(currentShelf.group);
+      this.tbrGroup = tbrStack.group;
+      this.completedGroup = completedStack.group;
+      this.currentGroup = currentShelf.group;
+
+      this.scene.add(this.tbrGroup);
+      this.scene.add(this.completedGroup);
+      this.scene.add(this.currentGroup);
 
       // 3. Combine all meshes for unified textures and raycasting
       const allBooks = [
@@ -120,6 +131,10 @@ class BookShowcaseApp {
         attachDynamicCoversAndSpine(mesh, mesh.userData.metadata);
       });
 
+      if (this.interactionController) {
+        this.interactionController.dispose();
+      }
+
       // 5. Initialize interaction controller across all shelves
       this.interactionController = new BookInteractionController({
         camera: this.camera,
@@ -129,8 +144,13 @@ class BookShowcaseApp {
         focusDistance: 3.8
       });
 
+      // Data loaded and rendered successfully
+      this.modal.hide();
+
     } catch (err) {
-      console.error('Error loading Goodreads live data:', err);
+      console.error('Error loading Goodreads shelves:', err);
+      // Display burning book error modal with exact error status/message
+      this.modal.showError(err.message, () => this.loadLiveData());
     }
   }
 
